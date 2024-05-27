@@ -2,7 +2,10 @@
 const WebSocket = require('ws');
 
 // Create a new WebSocket server
-const wss = new WebSocket.Server({ port: 8080 });
+//const wss = new WebSocket.Server({ port: 8080 }); //local testing
+const WEB_SOCKET_PORT = process.env.WEBSOCKET_PORT || 5000;
+
+const wss = new WebSocket.Server({ port: WEB_SOCKET_PORT });
 
 const players = new Map();  // Map to store player connections
 const parties = new Map();  // Map to store party members
