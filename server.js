@@ -31,6 +31,10 @@ function sendToParty(partyId, message) {
   }
 }
 
+function getPartyMembers(partyId) {
+  return parties.has(partyId) ? parties.get(partyId) : [];
+}
+
 wss.on('connection', (ws) => {
   console.log("User Connected !!");
   
@@ -133,20 +137,23 @@ wss.on('connection', (ws) => {
 
   ws.on('close', () => {
     console.log("User Disconnected !!");
-    // Remove player from all parties
-    players.forEach((_, playerId) => {
-      parties.forEach((party, partyId) => {
-        parties.set(partyId, party.filter(id => id !== playerId));
-      });
-    });
+    let disconnectedPlayerId;
 
-    // Remove player from players map and lobby
-    players.forEach((_, playerId) => {
-      if (players.get(playerId) === ws) {
+    // Find and remove the disconnected player
+    players.forEach((playerSocket, playerId) => {
+      if (playerSocket === ws) {
+        disconnectedPlayerId = playerId;
         players.delete(playerId);
         lobby = lobby.filter(id => id !== playerId);
       }
     });
+
+    // Remove the player from all parties
+    if (disconnectedPlayerId) {
+      parties.forEach((party, partyId) => {
+        parties.set(partyId, party.filter(id => id !== disconnectedPlayerId));
+      });
+    }
   });
 });
 
