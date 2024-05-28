@@ -1,17 +1,12 @@
-// Import the WebSocket library
 const WebSocket = require('ws');
 
-// Create a new WebSocket server
-//const wss = new WebSocket.Server({ port: 8080 }); //local testing
 const WEB_SOCKET_PORT = process.env.WEBSOCKET_PORT || 5000;
-
 const wss = new WebSocket.Server({ port: WEB_SOCKET_PORT });
 
-const players = new Map();  // Map to store player connections
-const parties = new Map();  // Map to store party members
-let lobby = []; // Array to store players in the lobby
+const players = new Map();
+const parties = new Map();
+let lobby = [];
 
-// Function to send message to a specific player
 function sendToPlayer(playerId, message) {
   const player = players.get(playerId);
   if (player && player.readyState === WebSocket.OPEN) {
@@ -19,7 +14,6 @@ function sendToPlayer(playerId, message) {
   }
 }
 
-// Function to send message to all players
 function sendToAll(message) {
   wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) {
@@ -28,7 +22,6 @@ function sendToAll(message) {
   });
 }
 
-// Function to send message to a specific party
 function sendToParty(partyId, message) {
   const party = parties.get(partyId);
   if (party) {
@@ -38,10 +31,9 @@ function sendToParty(partyId, message) {
   }
 }
 
-// Handling new connections
-// Handling new connections
 wss.on('connection', (ws) => {
-  console.log("User Connected !!")
+  console.log("User Connected !!");
+  
   ws.on('message', (data) => {
     let message;
     try {
@@ -54,14 +46,14 @@ wss.on('connection', (ws) => {
     switch (message.type) {
       case 'register':
         players.set(message.playerId, ws);
-        lobby.push(message.playerId); // Add player to the lobby
+        lobby.push(message.playerId);
         console.log("User Registered - ID:", message.playerId);
         break;
 
       case 'createParty':
         console.log("User wants to create a party:", message.partyId);
         if (!parties.has(message.partyId)) {
-          parties.set(message.partyId, [message.playerId]); // Add party creator to the party
+          parties.set(message.partyId, [message.playerId]);
           console.log("Party created with ID:", message.partyId);
         } else {
           console.log("Party with ID", message.partyId, "already exists");
@@ -92,24 +84,45 @@ wss.on('connection', (ws) => {
 
       case 'privateMessage':
         console.log("User wants to send private message to:", message.targetPlayerId);
-        sendToPlayer(message.targetPlayerId, { from: message.playerId, text: message.message });
+        const privateMessage = {
+          type: 'privateMessage',
+          from: message.playerId,
+          to: message.targetPlayerId,
+          text: message.message
+        };
+        sendToPlayer(message.targetPlayerId, privateMessage);
         break;
 
       case 'partyMessage':
         console.log("User wants to send party message in party:", message.partyId);
-        sendToParty(message.partyId, { from: message.playerId, text: message.message });
+        const partyMessage = {
+          type: 'partyMessage',
+          from: message.playerId,
+          partyId: message.partyId,
+          text: message.message
+        };
+        sendToParty(message.partyId, partyMessage);
         break;
 
       case 'globalMessage':
         console.log("User wants to send global message");
-        sendToAll({ from: message.playerId, text: message.message });
+        const globalMessage = {
+          type: 'globalMessage',
+          from: message.playerId,
+          text: message.message
+        };
+        sendToAll(globalMessage);
         break;
 
       case 'lobbyMessage':
         console.log("User wants to send lobby message");
-        // Send message to all players in the lobby
+        const lobbyMessage = {
+          type: 'lobbyMessage',
+          from: message.playerId,
+          text: message.message
+        };
         lobby.forEach(playerId => {
-          sendToPlayer(playerId, { from: message.playerId, text: message.message });
+          sendToPlayer(playerId, lobbyMessage);
         });
         break;
 
@@ -119,7 +132,7 @@ wss.on('connection', (ws) => {
   });
 
   ws.on('close', () => {
-    console.log("User Disconnected !!")
+    console.log("User Disconnected !!");
     // Remove player from all parties
     players.forEach((_, playerId) => {
       parties.forEach((party, partyId) => {
@@ -138,4 +151,3 @@ wss.on('connection', (ws) => {
 });
 
 console.log('WebSocket server is running !!');
-//console.log('WebSocket server is running on ws://localhost:8080');
