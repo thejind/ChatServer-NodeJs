@@ -35,6 +35,27 @@ function getPartyMembers(partyId) {
   return parties.has(partyId) ? parties.get(partyId) : [];
 }
 
+function emptyParty(partyId) {
+  // Check if the party exists
+  if (parties.has(partyId)) {
+    // Get the list of party members
+    const partyMembers = parties.get(partyId);
+
+    // Remove all party members from the party
+    parties.set(partyId, []);
+
+    // Log the action
+    console.log(`Party with ID ${partyId} emptied successfully.`);
+
+    // Notify all party members that they have been removed from the party
+    partyMembers.forEach(memberId => {
+      sendToPlayer(memberId, { type: 'partyEmpty', partyId: partyId });
+    });
+  } else {
+    console.log(`Party with ID ${partyId} does not exist.`);
+  }
+}
+
 wss.on('connection', (ws) => {
   console.log("User Connected !!");
 
@@ -84,6 +105,11 @@ wss.on('connection', (ws) => {
         console.log("User wants to get party members for party:", message.partyId);
         const partyMembers = getPartyMembers(message.partyId);
         ws.send(JSON.stringify({ type: 'partyMembers', members: partyMembers }));
+        break;
+
+      case 'emptyParty':
+        console.log("User wants to empty party:", message.partyId);
+        emptyParty(message.partyId);
         break;
 
       case 'privateMessage':
