@@ -37,7 +37,7 @@ function getPartyMembers(partyId) {
 
 wss.on('connection', (ws) => {
   console.log("User Connected !!");
-  
+
   ws.on('message', (data) => {
     let message;
     try {
@@ -49,15 +49,15 @@ wss.on('connection', (ws) => {
     console.log(message.type);
     switch (message.type) {
       case 'register':
-        players.set(message.playerId, ws);
-        lobby.push(message.playerId);
-        console.log("User Registered - ID:", message.playerId);
+        players.set(message.senderId, ws);
+        lobby.push(message.senderId);
+        console.log("User Registered - ID:", message.senderId);
         break;
 
       case 'createParty':
         console.log("User wants to create a party:", message.partyId);
         if (!parties.has(message.partyId)) {
-          parties.set(message.partyId, [message.playerId]);
+          parties.set(message.partyId, [message.senderId]);
           console.log("Party created with ID:", message.partyId);
         } else {
           console.log("Party with ID", message.partyId, "already exists");
@@ -70,13 +70,13 @@ wss.on('connection', (ws) => {
           console.log("Party with ID", message.partyId, "does not exist");
           break;
         }
-        parties.get(message.partyId).push(message.playerId);
+        parties.get(message.partyId).push(message.senderId);
         break;
 
       case 'leaveParty':
         console.log("User wants to leave party:", message.partyId);
         if (parties.has(message.partyId)) {
-          parties.set(message.partyId, parties.get(message.partyId).filter(id => id !== message.playerId));
+          parties.set(message.partyId, parties.get(message.partyId).filter(id => id !== message.senderId));
         }
         break;
 
@@ -90,7 +90,7 @@ wss.on('connection', (ws) => {
         console.log("User wants to send private message to:", message.targetPlayerId);
         const privateMessage = {
           type: 'privateMessage',
-          from: message.playerId,
+          from: message.senderId,
           to: message.targetPlayerId,
           text: message.message
         };
@@ -101,7 +101,7 @@ wss.on('connection', (ws) => {
         console.log("User wants to send party message in party:", message.partyId);
         const partyMessage = {
           type: 'partyMessage',
-          from: message.playerId,
+          from: message.senderId,
           partyId: message.partyId,
           text: message.message
         };
@@ -112,7 +112,7 @@ wss.on('connection', (ws) => {
         console.log("User wants to send global message");
         const globalMessage = {
           type: 'globalMessage',
-          from: message.playerId,
+          from: message.senderId,
           text: message.message
         };
         sendToAll(globalMessage);
@@ -122,7 +122,7 @@ wss.on('connection', (ws) => {
         console.log("User wants to send lobby message");
         const lobbyMessage = {
           type: 'lobbyMessage',
-          from: message.playerId,
+          from: message.senderId,
           text: message.message
         };
         lobby.forEach(playerId => {
