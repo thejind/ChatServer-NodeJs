@@ -67,7 +67,7 @@ function emptyParty(partyId) {
 wss.on('connection', (ws) => {
   console.log("User Connected !!");
 
-  ws.send(JSON.stringify({type : 'Connected to chat server !!'}));
+  ws.send(JSON.stringify({connection : true}));
 
   ws.on('message', (data) => {
     let message;
