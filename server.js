@@ -6,6 +6,7 @@ const wss = new WebSocket.Server({ port: WEB_SOCKET_PORT });
 const players = new Map();
 const parties = new Map();
 let lobby = [];
+const mutedPlayers = new Map();
 
 function sendToPlayer(playerId, message) {
   const player = players.get(playerId);
@@ -26,13 +27,20 @@ function sendToParty(partyId, message) {
   const party = parties.get(partyId);
   if (party) {
     party.forEach(playerId => {
-      sendToPlayer(playerId, message);
+      if (!isMuted(playerId, message.from)) {
+        sendToPlayer(playerId, message);
+      }
     });
   }
 }
 
 function getPartyMembers(partyId) {
   return parties.has(partyId) ? parties.get(partyId) : [];
+}
+
+function isMuted(playerId, senderId) {
+  const muted = mutedPlayers.get(playerId) || [];
+  return muted.includes(senderId);
 }
 
 function emptyParty(partyId) {
@@ -58,6 +66,8 @@ function emptyParty(partyId) {
 
 wss.on('connection', (ws) => {
   console.log("User Connected !!");
+
+  ws.send(JSON.stringify({type : 'Connected to chat server !!'}));
 
   ws.on('message', (data) => {
     let message;
@@ -120,7 +130,9 @@ wss.on('connection', (ws) => {
           to: message.targetPlayerId,
           text: message.message
         };
-        sendToPlayer(message.targetPlayerId, privateMessage);
+        if (!isMuted(message.targetPlayerId, message.senderId)) {
+          sendToPlayer(message.targetPlayerId, privateMessage);
+        }
         break;
 
       case 'partyMessage':
@@ -152,8 +164,29 @@ wss.on('connection', (ws) => {
           text: message.message
         };
         lobby.forEach(playerId => {
-          sendToPlayer(playerId, lobbyMessage);
+          if (!isMuted(playerId, message.senderId)) {
+            sendToPlayer(playerId, lobbyMessage);
+          }
         });
+        break;
+
+        case 'mutePlayer':
+        console.log("User wants to mute player:", message.targetPlayerId);
+        const mutedList = mutedPlayers.get(message.senderId) || [];
+        if (!mutedList.includes(message.targetPlayerId)) {
+          mutedList.push(message.targetPlayerId);
+          mutedPlayers.set(message.senderId, mutedList);
+          console.log(`Player ${message.senderId} muted player ${message.targetPlayerId}`);
+        }
+        break;
+
+      case 'unmutePlayer':
+        console.log("User wants to unmute player:", message.targetPlayerId);
+        const currentMutedList = mutedPlayers.get(message.senderId) || [];
+        if (currentMutedList.includes(message.targetPlayerId)) {
+          mutedPlayers.set(message.senderId, currentMutedList.filter(id => id !== message.targetPlayerId));
+          console.log(`Player ${message.senderId} unmuted player ${message.targetPlayerId}`);
+        }
         break;
 
       default:
