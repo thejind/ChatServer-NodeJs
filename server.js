@@ -1,4 +1,5 @@
 const WebSocket = require('ws');
+const { v4: uuidv4 } = require('uuid');
 
 const WEB_SOCKET_PORT = process.env.WEBSOCKET_PORT || 5000;
 const wss = new WebSocket.Server({ port: WEB_SOCKET_PORT });
@@ -66,8 +67,10 @@ function emptyParty(partyId) {
 
 wss.on('connection', (ws) => {
   console.log("User Connected !!");
+  const SID = uuidv4();
+  console.log(`User Connected with SID: ${SID}`);
 
-  ws.send(JSON.stringify({connection : true}));
+  ws.send(JSON.stringify({connection : true, sid : SID}));
 
   ws.on('message', (data) => {
     let message;
