@@ -69,7 +69,7 @@ function emptyParty(partyId) {
 wss.on('connection', (ws, req) => {
   console.log("User Connected !!");
 
-  const parsedURL = url.parse(req.url, true);
+  const parsedUrl = url.parse(req.url, true);
   const params = parsedUrl.query;
   console.log(`Connection parameters: ${JSON.stringify(params)}`);
 
