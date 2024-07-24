@@ -1,5 +1,6 @@
 const WebSocket = require('ws');
 const { v4: uuidv4 } = require('uuid');
+const url = require('url');
 
 const WEB_SOCKET_PORT = process.env.WEBSOCKET_PORT || 5000;
 const wss = new WebSocket.Server({ port: WEB_SOCKET_PORT });
@@ -65,8 +66,13 @@ function emptyParty(partyId) {
   }
 }
 
-wss.on('connection', (ws) => {
+wss.on('connection', (ws, req) => {
   console.log("User Connected !!");
+
+  const parsedURL = url.parse(req.url, true);
+  const params = parsedUrl.query;
+  console.log(`Connection parameters: ${JSON.stringify(params)}`);
+
   const SID = uuidv4();
   console.log(`User Connected with SID: ${SID}`);
 
