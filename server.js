@@ -68,6 +68,16 @@ io.on('connection', (socket) => {
   const params = socket.handshake.query;
   console.log(`Connection parameters: ${JSON.stringify(params)}`);
 
+  const name = params.name;
+  if (!name) {
+    console.error('Name parameter is missing');
+    socket.disconnect();
+    return;
+  }
+
+  players.set(UID, { socket, name });
+  lobby.push(UID);
+
   socket.on('message', (data) => {
     let message;
     try {
@@ -79,11 +89,11 @@ io.on('connection', (socket) => {
 
     console.log(message.type);
     switch (message.type) {
-      case 'register':
-        players.set(message.senderId, socket);
-        lobby.push(message.senderId);
-        console.log("User Registered - ID:", message.senderId);
-        break;
+      // case 'register':
+      //   players.set(message.senderId, socket);
+      //   lobby.push(message.senderId);
+      //   console.log("User Registered - ID:", message.senderId);
+      //   break;
 
       case 'createParty':
         console.log("User wants to create a party:", message.partyId);
