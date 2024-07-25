@@ -1,9 +1,13 @@
-const WebSocket = require('ws');
 const { v4: uuidv4 } = require('uuid');
-const url = require('url');
+const express = require('express');
+const http = require('http');
+const socketIo = require('socket.io');
+
+const app = express();
+const server = http.createServer(app);
+const io = socketIo(server);
 
 const WEB_SOCKET_PORT = process.env.WEBSOCKET_PORT || 5000;
-const wss = new WebSocket.Server({ port: WEB_SOCKET_PORT });
 
 const players = new Map();
 const parties = new Map();
@@ -12,17 +16,13 @@ const mutedPlayers = new Map();
 
 function sendToPlayer(playerId, message) {
   const player = players.get(playerId);
-  if (player && player.readyState === WebSocket.OPEN) {
-    player.send(JSON.stringify(message));
+  if (player) {
+    player.emit('message', message);
   }
 }
 
 function sendToAll(message) {
-  wss.clients.forEach(client => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(JSON.stringify(message));
-    }
-  });
+  io.emit('message', message);
 }
 
 function sendToParty(partyId, message) {
@@ -46,18 +46,10 @@ function isMuted(playerId, senderId) {
 }
 
 function emptyParty(partyId) {
-  // Check if the party exists
   if (parties.has(partyId)) {
-    // Get the list of party members
     const partyMembers = parties.get(partyId);
-
-    // Remove all party members from the party
     parties.set(partyId, []);
-
-    // Log the action
     console.log(`Party with ID ${partyId} emptied successfully.`);
-
-    // Notify all party members that they have been removed from the party
     partyMembers.forEach(memberId => {
       sendToPlayer(memberId, { type: 'partyEmpty', partyId: partyId });
     });
@@ -66,19 +58,14 @@ function emptyParty(partyId) {
   }
 }
 
-wss.on('connection', (ws, req) => {
+io.on('connection', (socket) => {
   console.log("User Connected !!");
-
-  const parsedUrl = url.parse(req.url, true);
-  const params = parsedUrl.query;
-  console.log(`Connection parameters: ${JSON.stringify(params)}`);
 
   const SID = uuidv4();
   console.log(`User Connected with SID: ${SID}`);
+  socket.emit('connection', { connection: true, sid: SID });
 
-  ws.send(JSON.stringify({connection : true, sid : SID}));
-
-  ws.on('message', (data) => {
+  socket.on('message', (data) => {
     let message;
     try {
       message = JSON.parse(data);
@@ -86,10 +73,11 @@ wss.on('connection', (ws, req) => {
       console.error('Invalid JSON:', error);
       return;
     }
+
     console.log(message.type);
     switch (message.type) {
       case 'register':
-        players.set(message.senderId, ws);
+        players.set(message.senderId, socket);
         lobby.push(message.senderId);
         console.log("User Registered - ID:", message.senderId);
         break;
@@ -123,7 +111,7 @@ wss.on('connection', (ws, req) => {
       case 'getPartyMembers':
         console.log("User wants to get party members for party:", message.partyId);
         const partyMembers = getPartyMembers(message.partyId);
-        ws.send(JSON.stringify({ type: 'partyMembers', members: partyMembers }));
+        socket.emit('message', { type: 'partyMembers', members: partyMembers });
         break;
 
       case 'emptyParty':
@@ -179,7 +167,7 @@ wss.on('connection', (ws, req) => {
         });
         break;
 
-        case 'mutePlayer':
+      case 'mutePlayer':
         console.log("User wants to mute player:", message.targetPlayerId);
         const mutedList = mutedPlayers.get(message.senderId) || [];
         if (!mutedList.includes(message.targetPlayerId)) {
@@ -203,20 +191,18 @@ wss.on('connection', (ws, req) => {
     }
   });
 
-  ws.on('close', () => {
+  socket.on('disconnect', () => {
     console.log("User Disconnected !!");
     let disconnectedPlayerId;
 
-    // Find and remove the disconnected player
     players.forEach((playerSocket, playerId) => {
-      if (playerSocket === ws) {
+      if (playerSocket === socket) {
         disconnectedPlayerId = playerId;
         players.delete(playerId);
         lobby = lobby.filter(id => id !== playerId);
       }
     });
 
-    // Remove the player from all parties
     if (disconnectedPlayerId) {
       parties.forEach((party, partyId) => {
         parties.set(partyId, party.filter(id => id !== disconnectedPlayerId));
@@ -225,4 +211,6 @@ wss.on('connection', (ws, req) => {
   });
 });
 
-console.log('WebSocket server is running !!');
+server.listen(WEB_SOCKET_PORT, () => {
+  console.log(`WebSocket server is running on port ${WEB_SOCKET_PORT} !!`);
+});
