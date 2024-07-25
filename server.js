@@ -65,6 +65,9 @@ io.on('connection', (socket) => {
   console.log(`User Connected with SID: ${SID}`);
   socket.emit('connection', { connection: true, sid: SID });
 
+  const params = socket.handshake.query;
+  console.log(`Connection parameters: ${JSON.stringify(params)}`);
+
   socket.on('message', (data) => {
     let message;
     try {
