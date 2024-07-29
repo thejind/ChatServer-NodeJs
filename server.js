@@ -75,8 +75,8 @@ io.on('connection', (socket) => {
     return;
   }
 
-  players.set(UID, { socket, name });
-  lobby.push(UID);
+  players.set(SID, { socket, name });
+  lobby.push(SID);
 
   socket.on('message', (data) => {
     let message;
