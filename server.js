@@ -12,8 +12,8 @@ const mutedPlayers = new Map();
 
 function sendToPlayer(playerId, message) {
   const player = players.get(playerId);
-  if (player && player.readyState === WebSocket.OPEN) {
-    player.send(JSON.stringify(message));
+  if (player && player.ws.readyState === WebSocket.OPEN) {
+    player.ws.send(JSON.stringify(message));
   }
 }
 
@@ -46,20 +46,12 @@ function isMuted(playerId, senderId) {
 }
 
 function emptyParty(partyId) {
-  // Check if the party exists
   if (parties.has(partyId)) {
-    // Get the list of party members
     const partyMembers = parties.get(partyId);
-
-    // Remove all party members from the party
     parties.set(partyId, []);
-
-    // Log the action
     console.log(`Party with ID ${partyId} emptied successfully.`);
-
-    // Notify all party members that they have been removed from the party
     partyMembers.forEach(memberId => {
-      sendToPlayer(memberId, { type: 'partyEmpty', partyId: partyId });
+      sendToPlayer(memberId, { type: 'partyEmpty', partyId });
     });
   } else {
     console.log(`Party with ID ${partyId} does not exist.`);
@@ -71,12 +63,21 @@ wss.on('connection', (ws, req) => {
 
   const parsedUrl = url.parse(req.url, true);
   const params = parsedUrl.query;
-  console.log(`Connection parameters: ${JSON.stringify(params)}`);
+  const playerName = params.name;
+
+  if (!playerName) {
+    console.error('Connection parameters must include a name.');
+    ws.close();
+    return;
+  }
 
   const SID = uuidv4();
-  console.log(`User Connected with SID: ${SID}`);
+  console.log(`User Connected with SID: ${SID} and Name: ${playerName}`);
 
-  ws.send(JSON.stringify({connection : true, sid : SID}));
+  players.set(SID, { ws, name: playerName });
+  lobby.push(SID);
+
+  ws.send(JSON.stringify({ connection: true, sid: SID, name: playerName }));
 
   ws.on('message', (data) => {
     let message;
@@ -86,143 +87,188 @@ wss.on('connection', (ws, req) => {
       console.error('Invalid JSON:', error);
       return;
     }
+
     console.log(message.type);
-    switch (message.type) {
-      case 'register':
-        players.set(message.senderId, ws);
-        lobby.push(message.senderId);
-        console.log("User Registered - ID:", message.senderId);
-        break;
-
-      case 'createParty':
-        console.log("User wants to create a party:", message.partyId);
-        if (!parties.has(message.partyId)) {
-          parties.set(message.partyId, [message.senderId]);
-          console.log("Party created with ID:", message.partyId);
-        } else {
-          console.log("Party with ID", message.partyId, "already exists");
-        }
-        break;
-
-      case 'joinParty':
-        console.log("User wants to join party:", message.partyId);
-        if (!parties.has(message.partyId)) {
-          console.log("Party with ID", message.partyId, "does not exist");
-          break;
-        }
-        parties.get(message.partyId).push(message.senderId);
-        break;
-
-      case 'leaveParty':
-        console.log("User wants to leave party:", message.partyId);
-        if (parties.has(message.partyId)) {
-          parties.set(message.partyId, parties.get(message.partyId).filter(id => id !== message.senderId));
-        }
-        break;
-
-      case 'getPartyMembers':
-        console.log("User wants to get party members for party:", message.partyId);
-        const partyMembers = getPartyMembers(message.partyId);
-        ws.send(JSON.stringify({ type: 'partyMembers', members: partyMembers }));
-        break;
-
-      case 'emptyParty':
-        console.log("User wants to empty party:", message.partyId);
-        emptyParty(message.partyId);
-        break;
-
-      case 'privateMessage':
-        console.log("User wants to send private message to:", message.targetPlayerId);
-        const privateMessage = {
-          type: 'privateMessage',
-          from: message.senderId,
-          to: message.targetPlayerId,
-          text: message.message
-        };
-        if (!isMuted(message.targetPlayerId, message.senderId)) {
-          sendToPlayer(message.targetPlayerId, privateMessage);
-        }
-        break;
-
-      case 'partyMessage':
-        console.log("User wants to send party message in party:", message.partyId);
-        const partyMessage = {
-          type: 'partyMessage',
-          from: message.senderId,
-          partyId: message.partyId,
-          text: message.message
-        };
-        sendToParty(message.partyId, partyMessage);
-        break;
-
-      case 'globalMessage':
-        console.log("User wants to send global message");
-        const globalMessage = {
-          type: 'globalMessage',
-          from: message.senderId,
-          text: message.message
-        };
-        sendToAll(globalMessage);
-        break;
-
-      case 'lobbyMessage':
-        console.log("User wants to send lobby message");
-        const lobbyMessage = {
-          type: 'lobbyMessage',
-          from: message.senderId,
-          text: message.message
-        };
-        lobby.forEach(playerId => {
-          if (!isMuted(playerId, message.senderId)) {
-            sendToPlayer(playerId, lobbyMessage);
-          }
-        });
-        break;
-
-        case 'mutePlayer':
-        console.log("User wants to mute player:", message.targetPlayerId);
-        const mutedList = mutedPlayers.get(message.senderId) || [];
-        if (!mutedList.includes(message.targetPlayerId)) {
-          mutedList.push(message.targetPlayerId);
-          mutedPlayers.set(message.senderId, mutedList);
-          console.log(`Player ${message.senderId} muted player ${message.targetPlayerId}`);
-        }
-        break;
-
-      case 'unmutePlayer':
-        console.log("User wants to unmute player:", message.targetPlayerId);
-        const currentMutedList = mutedPlayers.get(message.senderId) || [];
-        if (currentMutedList.includes(message.targetPlayerId)) {
-          mutedPlayers.set(message.senderId, currentMutedList.filter(id => id !== message.targetPlayerId));
-          console.log(`Player ${message.senderId} unmuted player ${message.targetPlayerId}`);
-        }
-        break;
-
-      default:
-        console.error('Unknown message type:', message.type);
-    }
+    handleMessage(ws, message);
   });
 
   ws.on('close', () => {
     console.log("User Disconnected !!");
-    let disconnectedPlayerId;
-
-    // Find and remove the disconnected player
-    players.forEach((playerSocket, playerId) => {
-      if (playerSocket === ws) {
-        disconnectedPlayerId = playerId;
-        players.delete(playerId);
-        lobby = lobby.filter(id => id !== playerId);
-      }
-    });
-
-    // Remove the player from all parties
-    if (disconnectedPlayerId) {
-      parties.forEach((party, partyId) => {
-        parties.set(partyId, party.filter(id => id !== disconnectedPlayerId));
-      });
-    }
+    handleDisconnect(ws);
   });
 });
+
+function handleMessage(ws, message) {
+  switch (message.type) {
+    case 'createParty':
+      handleCreateParty(message);
+      break;
+
+    case 'joinParty':
+      handleJoinParty(message);
+      break;
+
+    case 'leaveParty':
+      handleLeaveParty(message);
+      break;
+
+    case 'getPartyMembers':
+      handleGetPartyMembers(ws, message);
+      break;
+
+    case 'emptyParty':
+      handleEmptyParty(message);
+      break;
+
+    case 'privateMessage':
+      handlePrivateMessage(message);
+      break;
+
+    case 'partyMessage':
+      handlePartyMessage(message);
+      break;
+
+    case 'globalMessage':
+      handleGlobalMessage(message);
+      break;
+
+    case 'lobbyMessage':
+      handleLobbyMessage(message);
+      break;
+
+    case 'mutePlayer':
+      handleMutePlayer(message);
+      break;
+
+    case 'unmutePlayer':
+      handleUnmutePlayer(message);
+      break;
+
+    default:
+      console.error('Unknown message type:', message.type);
+  }
+}
+
+function handleCreateParty(message) {
+  console.log("User wants to create a party:", message.partyId);
+  if (!parties.has(message.partyId)) {
+    parties.set(message.partyId, [message.senderId]);
+    console.log("Party created with ID:", message.partyId);
+  } else {
+    console.log("Party with ID", message.partyId, "already exists");
+  }
+}
+
+function handleJoinParty(message) {
+  console.log("User wants to join party:", message.partyId);
+  if (!parties.has(message.partyId)) {
+    console.log("Party with ID", message.partyId, "does not exist");
+    return;
+  }
+  parties.get(message.partyId).push(message.senderId);
+}
+
+function handleLeaveParty(message) {
+  console.log("User wants to leave party:", message.partyId);
+  if (parties.has(message.partyId)) {
+    parties.set(message.partyId, parties.get(message.partyId).filter(id => id !== message.senderId));
+  }
+}
+
+function handleGetPartyMembers(ws, message) {
+  console.log("User wants to get party members for party:", message.partyId);
+  const partyMembers = getPartyMembers(message.partyId);
+  ws.send(JSON.stringify({ type: 'partyMembers', members: partyMembers }));
+}
+
+function handleEmptyParty(message) {
+  console.log("User wants to empty party:", message.partyId);
+  emptyParty(message.partyId);
+}
+
+function handlePrivateMessage(message) {
+  console.log("User wants to send private message to:", message.targetPlayerId);
+  const privateMessage = {
+    type: 'privateMessage',
+    from: message.senderId,
+    to: message.targetPlayerId,
+    text: message.message
+  };
+  if (!isMuted(message.targetPlayerId, message.senderId)) {
+    sendToPlayer(message.targetPlayerId, privateMessage);
+  }
+}
+
+function handlePartyMessage(message) {
+  console.log("User wants to send party message in party:", message.partyId);
+  const partyMessage = {
+    type: 'partyMessage',
+    from: message.senderId,
+    partyId: message.partyId,
+    text: message.message
+  };
+  sendToParty(message.partyId, partyMessage);
+}
+
+function handleGlobalMessage(message) {
+  console.log("User wants to send global message");
+  const globalMessage = {
+    type: 'globalMessage',
+    from: message.senderId,
+    text: message.message
+  };
+  sendToAll(globalMessage);
+}
+
+function handleLobbyMessage(message) {
+  console.log("User wants to send lobby message");
+  const lobbyMessage = {
+    type: 'lobbyMessage',
+    from: message.senderId,
+    text: message.message
+  };
+  lobby.forEach(playerId => {
+    if (!isMuted(playerId, message.senderId)) {
+      sendToPlayer(playerId, lobbyMessage);
+    }
+  });
+}
+
+function handleMutePlayer(message) {
+  console.log("User wants to mute player:", message.targetPlayerId);
+  const mutedList = mutedPlayers.get(message.senderId) || [];
+  if (!mutedList.includes(message.targetPlayerId)) {
+    mutedList.push(message.targetPlayerId);
+    mutedPlayers.set(message.senderId, mutedList);
+    console.log(`Player ${message.senderId} muted player ${message.targetPlayerId}`);
+  }
+}
+
+function handleUnmutePlayer(message) {
+  console.log("User wants to unmute player:", message.targetPlayerId);
+  const currentMutedList = mutedPlayers.get(message.senderId) || [];
+  if (currentMutedList.includes(message.targetPlayerId)) {
+    mutedPlayers.set(message.senderId, currentMutedList.filter(id => id !== message.targetPlayerId));
+    console.log(`Player ${message.senderId} unmuted player ${message.targetPlayerId}`);
+  }
+}
+
+function handleDisconnect(ws) {
+  let disconnectedPlayerId;
+
+  players.forEach((player, playerId) => {
+    if (player.ws === ws) {
+      disconnectedPlayerId = playerId;
+      players.delete(playerId);
+      lobby = lobby.filter(id => id !== playerId);
+    }
+  });
+
+  if (disconnectedPlayerId) {
+    parties.forEach((party, partyId) => {
+      parties.set(partyId, party.filter(id => id !== disconnectedPlayerId));
+    });
+  }
+}
 
 console.log('WebSocket server is running !!');
