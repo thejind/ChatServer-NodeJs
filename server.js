@@ -37,7 +37,11 @@ function sendToParty(partyId, message) {
 }
 
 function getPartyMembers(partyId) {
-  return parties.has(partyId) ? parties.get(partyId) : [];
+  if (!parties.has(partyId)) {
+    return [];
+  }
+  const partyMembers = parties.get(partyId);
+  return partyMembers.map(memberId => players.get(memberId).name);
 }
 
 function isMuted(playerId, senderId) {
@@ -48,7 +52,7 @@ function isMuted(playerId, senderId) {
 function emptyParty(partyId) {
   if (parties.has(partyId)) {
     const partyMembers = parties.get(partyId);
-    parties.set(partyId, []);
+    parties.set(partyId, new Set());
     console.log(`Party with ID ${partyId} emptied successfully.`);
     partyMembers.forEach(memberId => {
       sendToPlayer(memberId, { type: 'partyEmpty', partyId });
@@ -152,7 +156,7 @@ function handleMessage(ws, message) {
 function handleCreateParty(message) {
   console.log("User wants to create a party:", message.partyId);
   if (!parties.has(message.partyId)) {
-    parties.set(message.partyId, [message.senderId]);
+    parties.set(message.partyId, new Set([message.senderId]));
     console.log("Party created with ID:", message.partyId);
   } else {
     console.log("Party with ID", message.partyId, "already exists");
@@ -165,13 +169,13 @@ function handleJoinParty(message) {
     console.log("Party with ID", message.partyId, "does not exist");
     return;
   }
-  parties.get(message.partyId).push(message.senderId);
+  parties.get(message.partyId).add(message.senderId);
 }
 
 function handleLeaveParty(message) {
   console.log("User wants to leave party:", message.partyId);
   if (parties.has(message.partyId)) {
-    parties.set(message.partyId, parties.get(message.partyId).filter(id => id !== message.senderId));
+    parties.get(message.partyId).delete(message.senderId);
   }
 }
 
@@ -266,7 +270,7 @@ function handleDisconnect(ws) {
 
   if (disconnectedPlayerId) {
     parties.forEach((party, partyId) => {
-      parties.set(partyId, party.filter(id => id !== disconnectedPlayerId));
+      party.delete(disconnectedPlayerId);
     });
   }
 }
