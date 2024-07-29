@@ -40,7 +40,7 @@ function getPartyMembers(partyId) {
   if (!parties.has(partyId)) {
     return [];
   }
-  const partyMembers = parties.get(partyId);
+  const partyMembers = Array.from(parties.get(partyId)); // Convert Set to Array
   return partyMembers.map(memberId => players.get(memberId).name);
 }
 
