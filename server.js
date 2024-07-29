@@ -29,7 +29,7 @@ function sendToParty(partyId, message) {
   const party = parties.get(partyId);
   if (party) {
     party.forEach(playerId => {
-      if (!isMuted(playerId, message.from)) {
+      if (!isMuted(playerId, message.fromSid)) {
         sendToPlayer(playerId, message);
       }
     });
@@ -40,7 +40,7 @@ function getPartyMembers(partyId) {
   if (!parties.has(partyId)) {
     return [];
   }
-  const partyMembers = Array.from(parties.get(partyId)); // Convert Set to Array
+  const partyMembers = Array.from(parties.get(partyId));
   return partyMembers.map(memberId => players.get(memberId).name);
 }
 
@@ -192,10 +192,11 @@ function handleEmptyParty(message) {
 
 function handlePrivateMessage(message) {
   console.log("User wants to send private message to:", message.targetPlayerId);
+  const senderName = players.get(message.senderId).name;
   const privateMessage = {
     type: 'privateMessage',
-    from: message.senderId,
-    to: message.targetPlayerId,
+    from: senderName,
+    to: players.get(message.targetPlayerId).name,
     text: message.message
   };
   if (!isMuted(message.targetPlayerId, message.senderId)) {
@@ -205,9 +206,10 @@ function handlePrivateMessage(message) {
 
 function handlePartyMessage(message) {
   console.log("User wants to send party message in party:", message.partyId);
+  const senderName = players.get(message.senderId).name;
   const partyMessage = {
     type: 'partyMessage',
-    from: message.senderId,
+    from: senderName,
     partyId: message.partyId,
     text: message.message
   };
@@ -216,9 +218,10 @@ function handlePartyMessage(message) {
 
 function handleGlobalMessage(message) {
   console.log("User wants to send global message");
+  const senderName = players.get(message.senderId).name;
   const globalMessage = {
     type: 'globalMessage',
-    from: message.senderId,
+    from: senderName,
     text: message.message
   };
   sendToAll(globalMessage);
@@ -226,9 +229,10 @@ function handleGlobalMessage(message) {
 
 function handleLobbyMessage(message) {
   console.log("User wants to send lobby message");
+  const senderName = players.get(message.senderId).name;
   const lobbyMessage = {
     type: 'lobbyMessage',
-    from: message.senderId,
+    from: senderName,
     text: message.message
   };
   lobby.forEach(playerId => {
